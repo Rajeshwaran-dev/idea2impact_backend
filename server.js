@@ -153,14 +153,14 @@ app.post("/send-registration", async (req, res) => {
     let errorMessage = "Failed to send registration email.";
 
     if (error.responseCode === 535 || error.message.includes("535") || error.code === "EAUTH") {
-      errorMessage = "SMTP Authentication failed. Please check your Brevo SMTP credentials.";
-      console.error("\n🔴 Brevo Authentication Error Details:");
+      errorMessage = "SMTP Authentication failed. Please check your credentials.";
+      console.error("\n🔴 SMTP Authentication Error Details:");
       console.log("Current SMTP_USER:", process.env.SMTP_USER);
       console.log("Current SMTP_HOST:", process.env.SMTP_HOST);
       console.log("Current SMTP_PORT:", process.env.SMTP_PORT);
-      console.error("- Check if SMTP_USER is your Brevo SMTP Login (usually an email)");
-      console.error("- Verify if SMTP_PASS is a valid SMTP Key (not your Brevo account password)");
-      console.error("- Ensure your Brevo account status is active and not suspended");
+      console.error("- Check if SMTP_USER is your SMTP Login (username/email)");
+      console.error("- Verify if SMTP_PASS is a valid SMTP Key/Password");
+      console.error("- Ensure your SMTP provider account is active");
     } else if (error.code === "ECONNREFUSED") {
       errorMessage = "Cannot connect to email server (Connection Refused).";
     } else if (error.code === "ETIMEDOUT") {
