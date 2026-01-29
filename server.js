@@ -62,12 +62,13 @@ app.post("/send-registration", async (req, res) => {
       name, email, phone, college, year, department, teamSize, experience, skills, motivation
     });
     const savedRegistration = await registration.save();
+    console.log(process.env.SMTP_USER,process.env.SMTP_PASS,process.env.SMTP_HOST,process.env.SMTP_PORT,"===============")
 
     // 2. SMTP Configuration (Strictly from environment)
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: process.env.SMTP_SECURE === "true", // true for 465, false for 587
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: true, // true for 465, false for 587
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -78,7 +79,7 @@ app.post("/send-registration", async (req, res) => {
     // 3. Send Notification Email to ADMIN
     const mailOptions = {
       from: `"Idea2Impact" <${process.env.SENDER_EMAIL || process.env.SMTP_USER}>`,
-      to: process.env.RECIPIENT_EMAIL,
+      to: email,
       subject: "New Hackathon Registration — Idea2Impact 2026",
       html: `
         <div style="font-family: sans-serif; line-height: 1.5;">
