@@ -95,12 +95,14 @@ app.post("/send-registration", async (req, res) => {
     // Create transporter with debugging enabled
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false,
+      port: process.env.SMTP_PORT || 587,
+      secure: false, // true for 465, false for other ports
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      debug: true, // Enable debug logging
+      logger: true // Log to console
     });
 
     // Verify connection before sending
@@ -150,15 +152,17 @@ app.post("/send-registration", async (req, res) => {
     // Provide specific error messages
     let errorMessage = "Failed to send registration email.";
 
-    if (error.responseCode === 535 || error.message.includes("535")) {
-      errorMessage =
-        "SMTP Authentication failed. Please check email configuration.";
-      console.error("\n🔴 Authentication Error Details:");
-      console.error("- Check if SMTP_USER is your Brevo login email");
-      console.error("- Verify SMTP_PASS is a valid SMTP API key");
-      console.error("- Ensure sender email is verified in Brevo");
+    if (error.responseCode === 535 || error.message.includes("535") || error.code === "EAUTH") {
+      errorMessage = "SMTP Authentication failed. Please check your Brevo SMTP credentials.";
+      console.error("\n🔴 Brevo Authentication Error Details:");
+      console.log("Current SMTP_USER:", process.env.SMTP_USER);
+      console.log("Current SMTP_HOST:", process.env.SMTP_HOST);
+      console.log("Current SMTP_PORT:", process.env.SMTP_PORT);
+      console.error("- Check if SMTP_USER is your Brevo SMTP Login (usually an email)");
+      console.error("- Verify if SMTP_PASS is a valid SMTP Key (not your Brevo account password)");
+      console.error("- Ensure your Brevo account status is active and not suspended");
     } else if (error.code === "ECONNREFUSED") {
-      errorMessage = "Cannot connect to email server.";
+      errorMessage = "Cannot connect to email server (Connection Refused).";
     } else if (error.code === "ETIMEDOUT") {
       errorMessage = "Email server connection timeout.";
     }
@@ -190,6 +194,47 @@ app.get("/health", (req, res) => {
       mongodb_configured: !!MONGODB_URI,
     },
   });
+});
+
+// Diagnostic endpoint: Test Email Connection
+app.get("/test-email", async (req, res) => {
+  console.log("\n🧪 Running SMTP diagnostic test...");
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    debug: true,
+    logger: true
+  });
+
+  try {
+    console.log("🔌 Verifying transporter...");
+    await transporter.verify();
+    console.log("✅ Success: Transporter is ready!");
+
+    res.status(200).json({
+      success: true,
+      message: "SMTP Connection verified successfully!",
+      config: {
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        user: process.env.SMTP_USER
+      }
+    });
+  } catch (error) {
+    console.error("❌ Diagnostic Failed:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      code: error.code,
+      response: error.response
+    });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
