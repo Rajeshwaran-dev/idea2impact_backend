@@ -113,8 +113,8 @@ app.post("/send-registration", async (req, res) => {
     // Send email
     console.log("📤 Sending email...");
     const info = await transporter.sendMail({
-      from: `"Idea2Impact" <askevarajesh@gmail.com>`,
-      to: "askevarajesh@gmail.com",
+      from: `"Idea2Impact" <${process.env.SMTP_USER}>`,
+      to: process.env.RECIPIENT_EMAIL,
       subject: "New Hackathon Registration — Idea2Impact 2026",
       html: `
         <h2>New Registration Received 🚀</h2>
