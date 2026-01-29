@@ -119,16 +119,20 @@ app.post("/send-registration", async (req, res) => {
 
     // 2️⃣ Send Email Notification
     // Create transporter with debugging enabled
+    console.log("🛠️  Configuring Transporter:");
+    console.log("   Host:", process.env.SMTP_HOST);
+    console.log("   User:", process.env.SMTP_USER);
+
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT || 587,
-      secure: false, // true for 465, false for other ports
+      secure: false,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      debug: true, // Enable debug logging
-      logger: true // Log to console
+      debug: true,
+      logger: true
     });
 
     // Verify connection before sending
@@ -136,10 +140,14 @@ app.post("/send-registration", async (req, res) => {
     await transporter.verify();
     console.log("✅ SMTP connection verified!");
 
+    // Use RECIPIENT_EMAIL as a fallback for From address if needed
+    const fromEmail = process.env.SENDER_EMAIL || process.env.SMTP_USER;
+    console.log("📤 Sending email from:", fromEmail);
+
     // Send email
     console.log("📤 Sending email...");
     const info = await transporter.sendMail({
-      from: `"Idea2Impact" <${process.env.SMTP_USER}>`,
+      from: `"Idea2Impact" <${fromEmail}>`,
       to: process.env.RECIPIENT_EMAIL, // Send notification to Admin only
       subject: "New Hackathon Registration — Idea2Impact 2026",
       html: `
@@ -196,8 +204,8 @@ app.post("/send-registration", async (req, res) => {
     res.status(500).json({
       success: false,
       error: errorMessage,
-      details:
-        process.env.NODE_ENV === "development" ? error.message : undefined,
+      details: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined
     });
   }
 });
