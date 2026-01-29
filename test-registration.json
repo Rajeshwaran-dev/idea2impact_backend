@@ -1,0 +1,12 @@
+{
+    "name": "Test User",
+    "email": "askevarajesh@gmail",
+    "phone": "1234567890",
+    "college": "Test College",
+    "year": "3rd Year",
+    "department": "Computer Science",
+    "teamSize": "4",
+    "experience": "Intermediate",
+    "skills": "JavaScript, React, Node.js",
+    "motivation": "Want to learn and build innovative solutions"
+}
