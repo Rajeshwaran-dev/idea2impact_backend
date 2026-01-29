@@ -4,8 +4,34 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Registration from "./models/Registration.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const envPath = path.resolve(process.cwd(), ".env");
+console.log("\n📁 Path Diagnostics:");
+console.log("Current Working Directory (CWD):", process.cwd());
+console.log("Expected .env path:", envPath);
+console.log(".env file exists at CWD:", fs.existsSync(envPath) ? "✅ YES" : "❌ NO");
+
+let envResult = dotenv.config();
+
+// Fallback if not found in CWD
+if (!fs.existsSync(envPath)) {
+  const fallbackPath = path.resolve(__dirname, ".env");
+  console.log("Trying fallback path:", fallbackPath);
+  console.log(".env file exists at fallback:", fs.existsSync(fallbackPath) ? "✅ YES" : "❌ NO");
+  envResult = dotenv.config({ path: fallbackPath });
+}
+
+if (envResult.error) {
+  console.error("❌ Dotenv Error:", envResult.error.message);
+} else {
+  console.log("✅ Dotenv loaded successfully from:", envResult.parsed ? "Environment file" : "Process env");
+}
 const app = express();
 
 const allowedOrigins = [
@@ -114,7 +140,7 @@ app.post("/send-registration", async (req, res) => {
     console.log("📤 Sending email...");
     const info = await transporter.sendMail({
       from: `"Idea2Impact" <${process.env.SMTP_USER}>`,
-      to: process.env.RECIPIENT_EMAIL,
+      to: process.env.RECIPIENT_EMAIL, // Send notification to Admin only
       subject: "New Hackathon Registration — Idea2Impact 2026",
       html: `
         <h2>New Registration Received 🚀</h2>
