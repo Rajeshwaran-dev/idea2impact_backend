@@ -114,7 +114,7 @@ app.post("/send-registration", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Internal Server Error during registration",
-      details: process.env.NODE_ENV === "development" ? error.message : "Error sending email or saving to database"
+      details: error.message
     });
   }
 });
