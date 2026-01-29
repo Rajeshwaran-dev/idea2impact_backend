@@ -4,277 +4,128 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import Registration from "./models/Registration.js";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Initialize environment variables
+dotenv.config();
 
-const envPath = path.resolve(process.cwd(), ".env");
-console.log("\n📁 Path Diagnostics:");
-console.log("Current Working Directory (CWD):", process.cwd());
-console.log("Expected .env path:", envPath);
-console.log(".env file exists at CWD:", fs.existsSync(envPath) ? "✅ YES" : "❌ NO");
-
-let envResult = dotenv.config();
-
-// Fallback if not found in CWD
-if (!fs.existsSync(envPath)) {
-  const fallbackPath = path.resolve(__dirname, ".env");
-  console.log("Trying fallback path:", fallbackPath);
-  console.log(".env file exists at fallback:", fs.existsSync(fallbackPath) ? "✅ YES" : "❌ NO");
-  envResult = dotenv.config({ path: fallbackPath });
-}
-
-if (envResult.error) {
-  console.error("❌ Dotenv Error:", envResult.error.message);
-} else {
-  console.log("✅ Dotenv loaded successfully from:", envResult.parsed ? "Environment file" : "Process env");
-}
 const app = express();
 
+// --- CORS CONFIGURATION ---
 const allowedOrigins = [
   "https://idea2impact.vercel.app",
+  "https://idea-2-impact-buildathon.vercel.app", // Fallback if domain differs
   "http://localhost:3000",
-  "http://localhost:5126"
+  "http://localhost:5173", // Vite default
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
+        console.warn(`⚠️ CORS blocked for origin: ${origin}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
+
 app.use(express.json());
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/send-registration";
+// --- MONGODB CONNECTION ---
+const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => {
-    console.log("\n✅ MongoDB connected successfully!");
-    console.log("📊 Database:", mongoose.connection.name);
-  })
-  .catch((err) => {
-    console.error("\n❌ MongoDB connection error:", err.message);
-    console.error("⚠️  Server will continue, but registrations won't be saved to database.");
-  });
+if (!MONGODB_URI) {
+  console.error("❌ CRITICAL: MONGODB_URI is not defined in environment variables.");
+} else {
+  mongoose
+    .connect(MONGODB_URI)
+    .then(() => console.log("✅ MongoDB connected successfully"))
+    .catch((err) => console.error("❌ MongoDB connection error:", err.message));
+}
 
-// Debug: Log environment variables on startup
-console.log("\n🔍 Environment Check:");
-console.log("MONGODB_URI:", MONGODB_URI);
-console.log("SMTP_HOST:", process.env.SMTP_HOST || "❌ NOT SET");
-console.log("SMTP_USER:", process.env.SMTP_USER || "❌ NOT SET");
-console.log("SMTP_PASS:", process.env.SMTP_PASS ? "✅ SET" : "❌ NOT SET");
-console.log("");
-
-// 🔥 Registration API (Save to DB + Send Email)
+// --- REGISTRATION ENDPOINT ---
 app.post("/send-registration", async (req, res) => {
-  const {
-    name,
-    email,
-    phone,
-    college,
-    year,
-    department,
-    teamSize,
-    experience,
-    skills,
-    motivation,
-  } = req.body;
+  const { name, email, phone, college, year, department, teamSize, experience, skills, motivation } = req.body;
 
-  console.log("\n📧 New registration request received:");
-  console.log("Name:", name);
-  console.log("Email:", email);
+  console.log(`📩 New registration attempt: ${email}`);
 
   try {
-    // 1️⃣ Save to MongoDB Database
-    console.log("💾 Saving to database...");
+    // 1. Save to Database
     const registration = new Registration({
-      name,
-      email,
-      phone,
-      college,
-      year,
-      department,
-      teamSize,
-      experience,
-      skills,
-      motivation,
+      name, email, phone, college, year, department, teamSize, experience, skills, motivation
     });
-
     const savedRegistration = await registration.save();
-    console.log("✅ Registration saved to database!");
-    console.log("Database ID:", savedRegistration._id);
 
-    // 2️⃣ Send Email Notification
-    // Create transporter with debugging enabled
-    console.log("🛠️  Configuring Transporter:");
-    console.log("   Host:", process.env.SMTP_HOST);
-    console.log("   User:", process.env.SMTP_USER);
-
+    // 2. SMTP Configuration (Strictly from environment)
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
-      secure: false,
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: process.env.SMTP_SECURE === "true", // true for 465, false for 587
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      debug: true,
-      logger: true
+      connectionTimeout: 10000, // 10s timeout to prevent Render 502/504
     });
 
-    // Verify connection before sending
-    console.log("🔌 Verifying SMTP connection...");
-    await transporter.verify();
-    console.log("✅ SMTP connection verified!");
-
-    // Use RECIPIENT_EMAIL as a fallback for From address if needed
-    const fromEmail = process.env.SENDER_EMAIL || process.env.SMTP_USER;
-    console.log("📤 Sending email from:", fromEmail);
-
-    // Send email
-    console.log("📤 Sending email...");
-    const info = await transporter.sendMail({
-      from: `"Idea2Impact" <${fromEmail}>`,
-      to: process.env.RECIPIENT_EMAIL, // Send notification to Admin only
+    // 3. Send Notification Email to ADMIN
+    const mailOptions = {
+      from: `"Idea2Impact" <${process.env.SENDER_EMAIL || process.env.SMTP_USER}>`,
+      to: process.env.RECIPIENT_EMAIL,
       subject: "New Hackathon Registration — Idea2Impact 2026",
       html: `
-        <h2>New Registration Received 🚀</h2>
-        <p><b>Name:</b> ${name}</p>
-        <p><b>Email:</b> ${email}</p>
-        <p><b>Phone:</b> ${phone}</p>
-        <p><b>College:</b> ${college}</p>
-        <p><b>Year:</b> ${year}</p>
-        <p><b>Department:</b> ${department}</p>
-        <p><b>Team Size:</b> ${teamSize}</p>
-        <p><b>Experience:</b> ${experience || "Not specified"}</p>
-        <p><b>Skills:</b> ${skills || "Not specified"}</p>
-        <p><b>Motivation:</b> ${motivation || "Not specified"}</p>
-        <hr>
-        <p><small>Database ID: ${savedRegistration._id}</small></p>
+        <div style="font-family: sans-serif; line-height: 1.5;">
+          <h2>New Registration Received 🚀</h2>
+          <p><b>Name:</b> ${name}</p>
+          <p><b>Email:</b> ${email}</p>
+          <p><b>Phone:</b> ${phone}</p>
+          <p><b>College:</b> ${college}</p>
+          <p><b>Year:</b> ${year}</p>
+          <p><b>Department:</b> ${department}</p>
+          <p><b>Team Size:</b> ${teamSize}</p>
+          <p><b>Experience:</b> ${experience || "Not specified"}</p>
+          <p><b>Skills:</b> ${skills || "Not specified"}</p>
+          <p><b>Motivation:</b> ${motivation || "Not specified"}</p>
+          <hr>
+          <p><small>Database ID: ${savedRegistration._id}</small></p>
+        </div>
       `,
-    });
+    };
 
-    console.log("✅ Email sent successfully!");
-    console.log("Message ID:", info.messageId);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent: ${info.messageId}`);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Registration saved and email sent successfully",
-      data: {
-        registrationId: savedRegistration._id,
-        emailMessageId: info.messageId,
-      },
+      message: "Registration successful",
+      id: savedRegistration._id
     });
+
   } catch (error) {
-    console.error("\n❌ Email sending failed:");
-    console.error("Error Code:", error.code);
-    console.error("Error Message:", error.message);
+    console.error("❌ Registration error:", error);
 
-    // Provide specific error messages
-    let errorMessage = "Failed to send registration email.";
-
-    if (error.responseCode === 535 || error.message.includes("535") || error.code === "EAUTH") {
-      errorMessage = "SMTP Authentication failed. Please check your credentials.";
-      console.error("\n🔴 SMTP Authentication Error Details:");
-      console.log("Current SMTP_USER:", process.env.SMTP_USER);
-      console.log("Current SMTP_HOST:", process.env.SMTP_HOST);
-      console.log("Current SMTP_PORT:", process.env.SMTP_PORT);
-      console.error("- Check if SMTP_USER is your SMTP Login (username/email)");
-      console.error("- Verify if SMTP_PASS is a valid SMTP Key/Password");
-      console.error("- Ensure your SMTP provider account is active");
-    } else if (error.code === "ECONNREFUSED") {
-      errorMessage = "Cannot connect to email server (Connection Refused).";
-    } else if (error.code === "ETIMEDOUT") {
-      errorMessage = "Email server connection timeout.";
-    }
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: errorMessage,
-      details: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined
+      message: "Internal Server Error during registration",
+      details: process.env.NODE_ENV === "development" ? error.message : "Error sending email or saving to database"
     });
   }
 });
 
-// Health check endpoint
+// --- HEALTH CHECK ---
 app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    database: {
-      connected: mongoose.connection.readyState === 1,
-      name: mongoose.connection.name,
-    },
-    env: {
-      smtp_configured: !!(
-        process.env.SMTP_HOST &&
-        process.env.SMTP_USER &&
-        process.env.SMTP_PASS
-      ),
-      mongodb_configured: !!MONGODB_URI,
-    },
-  });
+  res.status(200).json({ status: "OK", uptime: process.uptime() });
 });
 
-// Diagnostic endpoint: Test Email Connection
-app.get("/test-email", async (req, res) => {
-  console.log("\n🧪 Running SMTP diagnostic test...");
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    debug: true,
-    logger: true
-  });
-
-  try {
-    console.log("🔌 Verifying transporter...");
-    await transporter.verify();
-    console.log("✅ Success: Transporter is ready!");
-
-    res.status(200).json({
-      success: true,
-      message: "SMTP Connection verified successfully!",
-      config: {
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT,
-        user: process.env.SMTP_USER
-      }
-    });
-  } catch (error) {
-    console.error("❌ Diagnostic Failed:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      code: error.code,
-      response: error.response
-    });
-  }
-});
-
+// --- START SERVER ---
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
-  console.log("\n🚀 Server running on http://localhost:" + PORT);
-  console.log("📋 Health check: http://localhost:" + PORT + "/health");
-  console.log("\n⏳ Waiting for registration requests...\n");
+  console.log(`🚀 Server running on port ${PORT} [NODE_ENV=${process.env.NODE_ENV}]`);
 });
